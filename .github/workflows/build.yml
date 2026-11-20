@@ -1,0 +1,53 @@
+name: build-angle-android-x64
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    steps:
+      - name: depot_tools
+        run: |
+          git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git $HOME/depot_tools
+          echo "$HOME/depot_tools" >> $GITHUB_PATH
+
+      - name: fetch ANGLE
+        run: |
+          mkdir -p $HOME/angle && cd $HOME/angle
+          gclient config --name . https://chromium.googlesource.com/angle/angle
+          gclient sync --no-history --shallow
+          echo "--- top level ---"
+          ls
+
+      - name: NDK
+        run: |
+          curl -sSL -o /tmp/ndk.zip https://dl.google.com/android/repository/android-ndk-r27c-linux.zip
+          unzip -q /tmp/ndk.zip -d $HOME
+          ls -d $HOME/android-ndk-r27c
+
+      - name: gn gen
+        run: |
+          cd $HOME/angle
+          gn gen out/Rel --args="target_os=\"android\" target_cpu=\"x64\" is_debug=false is_component_build=false angle_enable_vulkan=true android_ndk_path=\"$HOME/android-ndk-r27c\""
+
+      - name: ninja
+        run: |
+          cd $HOME/angle
+          ninja -C out/Rel libEGL_angle libGLESv2_angle || (echo "=== target miss, full build ==="; ninja -C out/Rel)
+
+      - name: collect
+        run: |
+          mkdir -p $HOME/artifact
+          find $HOME/angle/out/Rel -name 'libEGL_angle.so' -o -name 'libGLESv2_angle.so' -o -name 'libGLESv1_CM_angle.so' | xargs -r -I{} cp -v {} $HOME/artifact/
+          ls -l $HOME/artifact
+
+      - name: release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.run_number }}
+          files: $HOME/artifact/*
