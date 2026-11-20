@@ -21,10 +21,7 @@ jobs:
           mkdir -p $HOME/angle && cd $HOME/angle
           gclient config --name src --custom-var=checkout_android=True https://chromium.googlesource.com/angle/angle
           gclient sync
-          echo "--- src ---"
           ls $HOME/angle/src | head -40
-          echo "--- android_sdk ? ---"
-          ls $HOME/angle/src/third_party/android_sdk 2>/dev/null | head
 
       - name: NDK
         run: |
@@ -37,10 +34,10 @@ jobs:
           cd $HOME/angle/src
           gn gen out/Rel --args="target_os=\"android\" target_cpu=\"x64\" is_debug=false is_component_build=false angle_enable_vulkan=true android_ndk_path=\"$HOME/android-ndk-r27c\""
 
-      - name: ninja
+      - name: autoninja
         run: |
           cd $HOME/angle/src
-          ninja -C out/Rel libEGL_angle libGLESv2_angle || (echo "=== target miss, full build ==="; ninja -C out/Rel)
+          autoninja -C out/Rel libEGL_angle libGLESv2_angle || (echo "=== target miss, full build ==="; autoninja -C out/Rel)
 
       - name: collect
         run: |
