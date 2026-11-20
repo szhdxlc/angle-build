@@ -9,7 +9,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-22.04
-    timeout-minutes: 120
+    timeout-minutes: 150
     steps:
       - name: depot_tools
         run: |
@@ -19,10 +19,12 @@ jobs:
       - name: fetch ANGLE
         run: |
           mkdir -p $HOME/angle && cd $HOME/angle
-          gclient config --name src https://chromium.googlesource.com/angle/angle
+          gclient config --name src --custom-var=checkout_android=True https://chromium.googlesource.com/angle/angle
           gclient sync
           echo "--- src ---"
-          ls $HOME/angle/src | head -30
+          ls $HOME/angle/src | head -40
+          echo "--- android_sdk ? ---"
+          ls $HOME/angle/src/third_party/android_sdk 2>/dev/null | head
 
       - name: NDK
         run: |
