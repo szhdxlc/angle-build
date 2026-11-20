@@ -19,10 +19,10 @@ jobs:
       - name: fetch ANGLE
         run: |
           mkdir -p $HOME/angle && cd $HOME/angle
-          gclient config --name . https://chromium.googlesource.com/angle/angle
-          gclient sync --no-history --shallow
-          echo "--- top level ---"
-          ls
+          gclient config --name src https://chromium.googlesource.com/angle/angle
+          gclient sync
+          echo "--- src ---"
+          ls $HOME/angle/src | head -30
 
       - name: NDK
         run: |
@@ -32,18 +32,18 @@ jobs:
 
       - name: gn gen
         run: |
-          cd $HOME/angle
+          cd $HOME/angle/src
           gn gen out/Rel --args="target_os=\"android\" target_cpu=\"x64\" is_debug=false is_component_build=false angle_enable_vulkan=true android_ndk_path=\"$HOME/android-ndk-r27c\""
 
       - name: ninja
         run: |
-          cd $HOME/angle
+          cd $HOME/angle/src
           ninja -C out/Rel libEGL_angle libGLESv2_angle || (echo "=== target miss, full build ==="; ninja -C out/Rel)
 
       - name: collect
         run: |
           mkdir -p $HOME/artifact
-          find $HOME/angle/out/Rel -name 'libEGL_angle.so' -o -name 'libGLESv2_angle.so' -o -name 'libGLESv1_CM_angle.so' | xargs -r -I{} cp -v {} $HOME/artifact/
+          find $HOME/angle/src/out/Rel -name 'libEGL_angle.so' -o -name 'libGLESv2_angle.so' -o -name 'libGLESv1_CM_angle.so' | xargs -r -I{} cp -v {} $HOME/artifact/
           ls -l $HOME/artifact
 
       - name: release
