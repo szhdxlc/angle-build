@@ -11,42 +11,59 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 150
     steps:
+      - name: cache checkout
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/angle
+            ~/.cipd
+            ~/depot_tools
+          key: angle-src-v2
+
       - name: depot_tools
         run: |
-          git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git $HOME/depot_tools
+          if [ ! -d $HOME/depot_tools ]; then git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git $HOME/depot_tools; fi
           echo "$HOME/depot_tools" >> $GITHUB_PATH
 
       - name: fetch ANGLE
         run: |
           mkdir -p $HOME/angle && cd $HOME/angle
-          gclient config --name src --custom-var=checkout_android=True https://chromium.googlesource.com/angle/angle
+          if [ ! -f .gclient ]; then gclient config --name src --custom-var=checkout_android=True https://chromium.googlesource.com/angle/angle; fi
           gclient sync
           ls $HOME/angle/src | head -40
 
       - name: NDK
         run: |
-          curl -sSL -o /tmp/ndk.zip https://dl.google.com/android/repository/android-ndk-r27c-linux.zip
-          unzip -q /tmp/ndk.zip -d $HOME
+          if [ ! -d $HOME/android-ndk-r27c ]; then
+            curl -sSL -o /tmp/ndk.zip https://dl.google.com/android/repository/android-ndk-r27c-linux.zip
+            unzip -q /tmp/ndk.zip -d $HOME
+          fi
           ls -d $HOME/android-ndk-r27c
 
       - name: gn gen
         run: |
           cd $HOME/angle/src
-          gn gen out/Rel --args="target_os=\"android\" target_cpu=\"x64\" is_debug=false is_component_build=false angle_enable_vulkan=true android_ndk_path=\"$HOME/android-ndk-r27c\""
+          gn gen $HOME/out/Rel --args="target_os=\"android\" target_cpu=\"x64\" is_debug=false is_component_build=false angle_enable_vulkan=true android_ndk_path=\"$HOME/android-ndk-r27c\""
 
       - name: autoninja
         run: |
           cd $HOME/angle/src
-          autoninja -C out/Rel libEGL_angle libGLESv2_angle || (echo "=== target miss, full build ==="; autoninja -C out/Rel)
+          autoninja -C $HOME/out/Rel libEGL_angle libGLESv2_angle libGLESv1_CM_angle || (echo "=== retry all ==="; autoninja -C $HOME/out/Rel)
 
       - name: collect
         run: |
-          mkdir -p $HOME/artifact
-          find $HOME/angle/src/out/Rel -name 'libEGL_angle.so' -o -name 'libGLESv2_angle.so' -o -name 'libGLESv1_CM_angle.so' | xargs -r -I{} cp -v {} $HOME/artifact/
-          ls -l $HOME/artifact
+          mkdir -p artifact
+          find $HOME/out/Rel -name 'libEGL_angle.so' -o -name 'libGLESv2_angle.so' -o -name 'libGLESv1_CM_angle.so' | xargs -r -I{} cp -v {} artifact/
+          ls -l artifact
+
+      - name: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: angle-android-x64
+          path: artifact/*
 
       - name: release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ github.run_number }}
-          files: $HOME/artifact/*
+          files: artifact/*
