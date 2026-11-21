@@ -93,16 +93,16 @@ jobs:
         if: failure()
         run: |
           {
-            echo "### ninja angle log"
+            echo "## ninja angle (last 60 lines)"
             echo '```'
-            tail -c 60000 $HOME/ninja-angle.log 2>/dev/null | grep -aE 'fatal error|FAILED:|error:|undefined reference' | head -30
+            tail -60 $HOME/ninja-angle.log 2>/dev/null || echo "no log"
             echo '```'
-            echo "### ninja swift log"
+            echo "## ninja swift (last 40 lines)"
             echo '```'
-            tail -c 60000 $HOME/ninja-swift.log 2>/dev/null | grep -aE 'fatal error|FAILED:|error:|undefined reference' | head -30
+            tail -40 $HOME/ninja-swift.log 2>/dev/null || echo "no log"
             echo '```'
           } > $HOME/error-body.md
-          ls -l $HOME/error-body.md
+          wc -c $HOME/error-body.md
 
       - name: release logs
         if: failure()
