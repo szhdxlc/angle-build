@@ -35,15 +35,8 @@ jobs:
         run: |
           H=$(find $HOME/angle/src/third_party -name 'vk_android_native_buffer.h' 2>/dev/null | head -1)
           echo "found header: $H"
-          if [ -n "$H" ]; then
-            mkdir -p $HOME/angle/src/third_party/SwiftShader/include/vulkan
-            cp -v "$H" $HOME/angle/src/third_party/SwiftShader/include/vulkan/
-          else
-            mkdir -p $HOME/angle/src/third_party/SwiftShader/include/vulkan
-            curl -sSL -o $HOME/angle/src/third_party/SwiftShader/include/vulkan/vk_android_native_buffer.h \
-              https://raw.githubusercontent.com/KhronosGroup/Vulkan-Headers/main/include/vulkan/vk_android_native_buffer.h
-            echo "fetched from Khronos"
-          fi
+          mkdir -p $HOME/angle/src/third_party/SwiftShader/include/vulkan
+          if [ -n "$H" ]; then cp -v "$H" $HOME/angle/src/third_party/SwiftShader/include/vulkan/; fi
           ls -l $HOME/angle/src/third_party/SwiftShader/include/vulkan/
 
       - name: NDK
@@ -62,14 +55,20 @@ jobs:
       - name: autoninja angle
         run: |
           cd $HOME/angle/src
+          set +e
           autoninja -C $HOME/out/Rel libEGL_angle.so libGLESv2_angle.so libGLESv1_CM_angle.so 2>&1 | tee $HOME/ninja-angle.log
-          exit ${PIPESTATUS[0]}
+          RC=${PIPESTATUS[0]}
+          echo "rc=$RC"
+          exit $RC
 
       - name: autoninja swiftshader
         run: |
           cd $HOME/angle/src
+          set +e
           autoninja -C $HOME/out/Rel libvk_swiftshader.so 2>&1 | tee $HOME/ninja-swift.log
-          exit ${PIPESTATUS[0]}
+          RC=${PIPESTATUS[0]}
+          echo "rc=$RC"
+          exit $RC
 
       - name: collect
         run: |
@@ -90,16 +89,24 @@ jobs:
           tag_name: v${{ github.run_number }}
           files: artifact/*
 
-      - name: save logs on failure
+      - name: build error body
         if: failure()
         run: |
-          mkdir -p logs
-          cp $HOME/ninja-angle.log ./logs/ 2>/dev/null || true
-          cp $HOME/ninja-swift.log ./logs/ 2>/dev/null || true
+          {
+            echo "### ninja angle log"
+            echo '```'
+            tail -c 60000 $HOME/ninja-angle.log 2>/dev/null | grep -aE 'fatal error|FAILED:|error:|undefined reference' | head -30
+            echo '```'
+            echo "### ninja swift log"
+            echo '```'
+            tail -c 60000 $HOME/ninja-swift.log 2>/dev/null | grep -aE 'fatal error|FAILED:|error:|undefined reference' | head -30
+            echo '```'
+          } > $HOME/error-body.md
+          ls -l $HOME/error-body.md
 
       - name: release logs
         if: failure()
         uses: softprops/action-gh-release@v2
         with:
           tag_name: log-${{ github.run_number }}
-          files: logs/*
+          body_path: $HOME/error-body.md
