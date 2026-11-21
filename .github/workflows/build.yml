@@ -42,7 +42,7 @@ jobs:
       - name: gn gen
         run: |
           cd $HOME/angle/src
-          gn gen $HOME/out/Rel --args="target_os=\"android\" target_cpu=\"x64\" is_debug=false is_component_build=false angle_enable_vulkan=true android_ndk_path=\"$HOME/android-ndk-r27c\""
+          gn gen $HOME/out/Rel --args="target_os=\"android\" target_cpu=\"x64\" is_debug=false is_component_build=false angle_enable_vulkan=true angle_enable_swiftshader=true android_ndk_path=\"$HOME/android-ndk-r27c\""
 
       - name: autoninja angle
         run: |
@@ -50,19 +50,19 @@ jobs:
           autoninja -C $HOME/out/Rel libEGL_angle.so libGLESv2_angle.so libGLESv1_CM_angle.so 2>&1 | tee $HOME/ninja-angle.log
           exit ${PIPESTATUS[0]}
 
-      - name: build swiftshader
+      - name: autoninja swiftshader
         run: |
           cd $HOME/angle/src
-          T=$(autoninja -C $HOME/out/Rel -t targets all | grep -oE '^[^:]*libvk_swiftshader[^:]*:' | tr -d ':' | head -1)
-          if [ -z "$T" ]; then T=$(autoninja -C $HOME/out/Rel -t targets all | grep -iE 'swiftshader' | grep -iE 'vk|vulkan' | head -1 | cut -d: -f1); fi
-          echo "swift target = $T"
-          if [ -n "$T" ]; then autoninja -C $HOME/out/Rel "$T" 2>&1 | tee $HOME/ninja-swift.log; exit ${PIPESTATUS[0]}; else echo "no swift target found"; fi
+          autoninja -C $HOME/out/Rel libvk_swiftshader.so 2>&1 | tee $HOME/ninja-swift.log
+          exit ${PIPESTATUS[0]}
 
       - name: collect
         run: |
           mkdir -p artifact
           find $HOME/out/Rel -name 'libEGL_angle.so' -o -name 'libGLESv2_angle.so' -o -name 'libGLESv1_CM_angle.so' -o -name 'libvk_swiftshader.so' | xargs -r -I{} cp -v {} artifact/
+          find $HOME/out/Rel -name '*.so' > artifact/so-listing.txt
           ls -l artifact
+          cat artifact/so-listing.txt
 
       - name: upload
         uses: actions/upload-artifact@v4
