@@ -30,7 +30,6 @@ jobs:
           mkdir -p $HOME/angle && cd $HOME/angle
           if [ ! -f .gclient ]; then gclient config --name src --custom-var=checkout_android=True https://chromium.googlesource.com/angle/angle; fi
           gclient sync
-          ls $HOME/angle/src/third_party/SwiftShader | head
 
       - name: NDK
         run: |
@@ -43,26 +42,27 @@ jobs:
       - name: gn gen
         run: |
           cd $HOME/angle/src
-          gn gen $HOME/out/Rel --args="target_os=\"android\" target_cpu=\"x64\" is_debug=false is_component_build=false angle_enable_vulkan=true angle_enable_swiftshader=true android_ndk_path=\"$HOME/android-ndk-r27c\""
+          gn gen $HOME/out/Rel --args="target_os=\"android\" target_cpu=\"x64\" is_debug=false is_component_build=false angle_enable_vulkan=true android_ndk_path=\"$HOME/android-ndk-r27c\""
 
       - name: autoninja angle
         run: |
           cd $HOME/angle/src
-          autoninja -C $HOME/out/Rel libEGL_angle libGLESv2_angle libGLESv1_CM_angle
+          autoninja -C $HOME/out/Rel libEGL_angle libGLESv2_angle libGLESv1_CM_angle 2>&1 | tee $HOME/ninja-angle.log
+          exit ${PIPESTATUS[0]}
 
-      - name: autoninja swiftshader
+      - name: discover swift target
         run: |
           cd $HOME/angle/src
-          autoninja -C $HOME/out/Rel -t targets all | grep -i -E 'swift' | head -20
+          autoninja -C $HOME/out/Rel -t targets all | grep -i swift | head -20
 
       - name: build swiftshader
         run: |
           cd $HOME/angle/src
           T=$(autoninja -C $HOME/out/Rel -t targets all | grep -oE '^[^:]*libvk_swiftshader[^:]*:' | tr -d ':' | head -1)
-          if [ -z "$T" ]; then T=$(autoninja -C $HOME/out/Rel -t targets all | grep -i swiftshader | grep -iE 'vk|vulkan' | head -1 | cut -d: -f1); fi
+          if [ -z "$T" ]; then T=$(autoninja -C $HOME/out/Rel -t targets all | grep -iE 'swiftshader' | grep -iE 'vk|vulkan' | head -1 | cut -d: -f1); fi
           echo "swift target = $T"
-          if [ -n "$T" ]; then autoninja -C $HOME/out/Rel "$T"; fi
-          find $HOME/out/Rel -name '*swiftshader*' | head -20
+          if [ -n "$T" ]; then autoninja -C $HOME/out/Rel "$T" 2>&1 | tee $HOME/ninja-swift.log; exit ${PIPESTATUS[0]}; else echo "no swift target found"; fi
+          find $HOME/out/Rel -name '*swiftshader*' -o -name 'libvk*' | head -20
 
       - name: collect
         run: |
@@ -81,3 +81,17 @@ jobs:
         with:
           tag_name: v${{ github.run_number }}
           files: artifact/*
+
+      - name: save logs on failure
+        if: failure()
+        run: |
+          mkdir -p logs
+          cp $HOME/ninja-angle.log ./logs/ 2>/dev/null || true
+          cp $HOME/ninja-swift.log ./logs/ 2>/dev/null || true
+
+      - name: release logs
+        if: failure()
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: log-${{ github.run_number }}
+          files: logs/*
