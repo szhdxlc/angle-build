@@ -9,7 +9,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-22.04
-    timeout-minutes: 150
+    timeout-minutes: 180
     steps:
       - name: cache checkout
         uses: actions/cache@v4
@@ -30,7 +30,7 @@ jobs:
           mkdir -p $HOME/angle && cd $HOME/angle
           if [ ! -f .gclient ]; then gclient config --name src --custom-var=checkout_android=True https://chromium.googlesource.com/angle/angle; fi
           gclient sync
-          ls $HOME/angle/src | head -40
+          ls $HOME/angle/src/third_party/SwiftShader | head
 
       - name: NDK
         run: |
@@ -43,17 +43,31 @@ jobs:
       - name: gn gen
         run: |
           cd $HOME/angle/src
-          gn gen $HOME/out/Rel --args="target_os=\"android\" target_cpu=\"x64\" is_debug=false is_component_build=false angle_enable_vulkan=true android_ndk_path=\"$HOME/android-ndk-r27c\""
+          gn gen $HOME/out/Rel --args="target_os=\"android\" target_cpu=\"x64\" is_debug=false is_component_build=false angle_enable_vulkan=true angle_enable_swiftshader=true android_ndk_path=\"$HOME/android-ndk-r27c\""
 
-      - name: autoninja
+      - name: autoninja angle
         run: |
           cd $HOME/angle/src
-          autoninja -C $HOME/out/Rel libEGL_angle libGLESv2_angle libGLESv1_CM_angle || (echo "=== retry all ==="; autoninja -C $HOME/out/Rel)
+          autoninja -C $HOME/out/Rel libEGL_angle libGLESv2_angle libGLESv1_CM_angle
+
+      - name: autoninja swiftshader
+        run: |
+          cd $HOME/angle/src
+          autoninja -C $HOME/out/Rel -t targets all | grep -i -E 'swift' | head -20
+
+      - name: build swiftshader
+        run: |
+          cd $HOME/angle/src
+          T=$(autoninja -C $HOME/out/Rel -t targets all | grep -oE '^[^:]*libvk_swiftshader[^:]*:' | tr -d ':' | head -1)
+          if [ -z "$T" ]; then T=$(autoninja -C $HOME/out/Rel -t targets all | grep -i swiftshader | grep -iE 'vk|vulkan' | head -1 | cut -d: -f1); fi
+          echo "swift target = $T"
+          if [ -n "$T" ]; then autoninja -C $HOME/out/Rel "$T"; fi
+          find $HOME/out/Rel -name '*swiftshader*' | head -20
 
       - name: collect
         run: |
           mkdir -p artifact
-          find $HOME/out/Rel -name 'libEGL_angle.so' -o -name 'libGLESv2_angle.so' -o -name 'libGLESv1_CM_angle.so' | xargs -r -I{} cp -v {} artifact/
+          find $HOME/out/Rel -name 'libEGL_angle.so' -o -name 'libGLESv2_angle.so' -o -name 'libGLESv1_CM_angle.so' -o -name 'libvk_swiftshader.so' | xargs -r -I{} cp -v {} artifact/
           ls -l artifact
 
       - name: upload
