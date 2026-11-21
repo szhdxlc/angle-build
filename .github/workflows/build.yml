@@ -31,6 +31,21 @@ jobs:
           if [ ! -f .gclient ]; then gclient config --name src --custom-var=checkout_android=True https://chromium.googlesource.com/angle/angle; fi
           gclient sync
 
+      - name: patch swiftshader headers
+        run: |
+          H=$(find $HOME/angle/src/third_party -name 'vk_android_native_buffer.h' 2>/dev/null | head -1)
+          echo "found header: $H"
+          if [ -n "$H" ]; then
+            mkdir -p $HOME/angle/src/third_party/SwiftShader/include/vulkan
+            cp -v "$H" $HOME/angle/src/third_party/SwiftShader/include/vulkan/
+          else
+            mkdir -p $HOME/angle/src/third_party/SwiftShader/include/vulkan
+            curl -sSL -o $HOME/angle/src/third_party/SwiftShader/include/vulkan/vk_android_native_buffer.h \
+              https://raw.githubusercontent.com/KhronosGroup/Vulkan-Headers/main/include/vulkan/vk_android_native_buffer.h
+            echo "fetched from Khronos"
+          fi
+          ls -l $HOME/angle/src/third_party/SwiftShader/include/vulkan/
+
       - name: NDK
         run: |
           if [ ! -d $HOME/android-ndk-r27c ]; then
@@ -62,7 +77,6 @@ jobs:
           find $HOME/out/Rel -name 'libEGL_angle.so' -o -name 'libGLESv2_angle.so' -o -name 'libGLESv1_CM_angle.so' -o -name 'libvk_swiftshader.so' | xargs -r -I{} cp -v {} artifact/
           find $HOME/out/Rel -name '*.so' > artifact/so-listing.txt
           ls -l artifact
-          cat artifact/so-listing.txt
 
       - name: upload
         uses: actions/upload-artifact@v4
